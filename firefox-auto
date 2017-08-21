@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+
+# Requires pyxdg
+
+import os
+import shutil
+import sys
+import tarfile
+import urllib.request
+from pathlib import Path
+from subprocess import Popen, PIPE
+from tempfile import TemporaryDirectory
+
+import xdg.BaseDirectory
+
+
+DATA_PATH = Path(xdg.BaseDirectory.xdg_data_home) / 'firefox-auto'
+
+
+def run_zenity(type, *args, **popen_kwargs):
+    kwargs = dict(
+        stdin=PIPE, stdout=PIPE,
+        bufsize=1,  # line buffered
+        universal_newlines=True,  # text mode
+    )
+    kwargs.update(popen_kwargs)
+    return Popen(
+        ['zenity', type] + list(args),
+        **kwargs
+    )
+
+
+class UserAbort(Exception):
+    pass
+
+
+class Progress:
+    """Show a progress dialog to the user.
+
+    text - The initial message about the progress.
+    percentage - The initial percentage to set the progress bar to.
+    auto_close - True if the dialog should close automatically if it reaches
+                 100%.
+    pulsate - True is the status should pulsate instead of progress."
+
+    The close method should be called even when auto_close=True to ensure user
+    abortion is detected.
+    """
+
+    def __init__(
+        self, title='',
+        text='', percentage=0,
+        auto_close=False, pulsate=False,
+        **popen_kwargs
+    ):
+        args = [
+            '--width=400',
+        ]
+        if title:
+            args.append('--title=%s' % title)
+        if text:
+            args.append('--text=%s' % text)
+        if percentage:
+            args.append('--percentage=%s' % percentage)
+        if auto_close:
+            args.append('--auto-close=%s' % auto_close)
+        if pulsate:
+            args.append('--pulsate=%s' % pulsate)
+
+        self.process = run_zenity('--progress', *args, **popen_kwargs)
+
+    def update(self, percent, message=''):
+        """Update progress bar and (optionally) message"""
+        try:
+            if type(percent) == float:
+                percent = int(percent * 100)
+            self.process.stdin.write(str(percent) + '\n')
+            if message:
+                self.process.stdin.write('# %s\n' % message)
+        except BrokenPipeError:
+            if self.process.poll() == 1:
+                raise UserAbort
+            else:
+                raise
+
+    def close(self):
+        self.process.terminate()
+        if self.process.wait() == 1:
+            raise UserAbort
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type != UserAbort:
+            self.close()
+
+
+def install():
+    # progress = Progress(auto_close=False)
+    # for i in range(101):
+    #     print(i)
+    #     progress.update(i, f'{i}%')
+    #     time.sleep(0.015)
+    # time.sleep(1)
+    # # progress.update(55)
+    # progress.close()
+    # time.sleep(3)
+
+    # with Progress(auto_close=False) as progress:
+    #     for i in range(101):
+    #         print(i)
+    #         progress.update(i, f'{i}%')
+    #         time.sleep(0.015)
+    #     time.sleep(1)
+    #     # progress.update(55)
+    # time.sleep(3)
+
+    url = 'https://download.mozilla.org/?product=firefox-beta-latest&os=linux64&lang=fr'
+    # with f as urllib.request.urlopen(url)
+    with Progress(title="firefox-auto", auto_close=True) as progress:
+        def reporthook(nb_blocks, block_size, total_size):
+            current_size = nb_blocks * block_size
+            percent = current_size / total_size
+            progress.update(
+                percent,
+                f'Downloading latest release...   {percent:.0%}',
+            )
+
+        urllib.request.urlcleanup()
+        urllib.request.urlretrieve(url, '/tmp/firefox.tar.bz2', reporthook)
+
+    release_path = DATA_PATH / 'beta'
+    with Progress(
+        title="firefox-auto",
+        text='Extracting firefox...',
+        pulsate=True
+    ) as progress:
+        DATA_PATH.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=DATA_PATH) as tmpdir:
+            with tarfile.open('/tmp/firefox.tar.bz2', 'r') as f:
+                f.extractall(tmpdir)
+            if release_path.exists():
+                shutil.rmtree(release_path.as_posix())
+            shutil.move(
+                Path(tmpdir).joinpath('firefox').as_posix(),
+                release_path,
+            )
+
+
+def main():
+    exec_path = DATA_PATH / 'beta' / 'firefox'
+    # exec_path = DATA_PATH / 'beta' / 'run-mozilla.sh'
+    if not exec_path.exists():
+        install()
+
+    args = [exec_path.as_posix(), *sys.argv[1:]]
+    # print(exec_path.as_posix())
+    # print(args)
+    os.execv(exec_path.as_posix(), args)
+    # os.execv(
+    #     (DATA_PATH / 'beta' / 'run-mozilla.sh').as_posix(),
+    #     [
+    #         'run-mozilla.sh',
+    #         (DATA_PATH / 'beta' / 'firefox'),
+    #         *sys.argv[1:],
+    #     ]
+    # )
+    # os.execv('/bin/sh', [
+    #     'sh', '-c',
+    #     f'exec {exec_path.as_posix()} ' + ' '.join(sys.argv[1:])
+    # ])
+
+
+if __name__ == '__main__':
+    main()
