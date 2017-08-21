@@ -17,6 +17,105 @@ import xdg.BaseDirectory
 DATA_PATH = Path(xdg.BaseDirectory.xdg_data_home) / 'firefox-auto'
 
 
+LANGUAGES = {
+    'ach': 'Acholi',
+    'af': 'Afrikaans (South Africa)',
+    'an': 'Netherlands Antilles',
+    'ar': 'Aarabic',
+    'as': 'Assamese',
+    'ast': 'Asturian',
+    'az': 'Azerbaijani',
+    'be': 'Belarusian',
+    'bg': 'Bulgarian',
+    'bn-BD': 'Bengali (Bangladesh)',
+    'bn-IN': 'Bengali (India)',
+    'br': 'Breton',
+    'bs': 'Bosnian',
+    'ca': 'Catalan',
+    'cak': 'Kaqchikel',
+    'cs': 'Czech',
+    'cy': 'Welsh',
+    'da': 'Danish',
+    'de': 'German',
+    'dsb': 'Lower Sorbian',
+    'el': 'Greek',
+    'en-GB': 'English (United Kingdom)',
+    'en-US': 'English (US)',
+    'en-ZA': 'English (South African)',
+    'eo': 'Esperanto',
+    'es-AR': 'Spanish (Argentina)',
+    'es-CL': 'Spanish (Chile)',
+    'es-ES': 'Spanish (Spain)',
+    'es-MX': 'Spanish (Mexico)',
+    'et': 'Estonian',
+    'eu': 'Basque',
+    'fa': 'Persian',
+    'ff': 'Fulah',
+    'fi': 'Finnish',
+    'fr': 'French',
+    'fy-NL': 'Frisian',
+    'ga-IE': 'Irish',
+    'gd': 'Gaelic (Scotland)',
+    'gl': 'Galician',
+    'gn': 'Guarani',
+    'gu-IN': 'Gujarati (India)',
+    'he': 'Hebrew',
+    'hi-IN': 'Hindi',
+    'hr': 'Croatian',
+    'hsb': 'Upper Sorbian',
+    'hu': 'Hungarian',
+    'hy-AM': 'Armenian',
+    'id': 'Indonesian',
+    'is': 'Icelandic',
+    'it': 'Italian',
+    'ja': 'Japanese',
+    'ka': 'Georgian',
+    'kab': 'Kabyle',
+    'kk': 'Kazakh',
+    'km': 'Khmer',
+    'kn': 'Kannada',
+    'ko': 'Korean',
+    'lij': 'Ligurian',
+    'lt': 'Lithuanian',
+    'lv': 'Latvian',
+    'mai': 'Maithili',
+    'mk': 'Macedonian',
+    'ml': 'Malayalam',
+    'mr': 'Marathi',
+    'ms': 'Malay',
+    'my': 'Burmese',
+    'nb-NO': 'Norwegian (Bokmal)',
+    'nl': 'Dutch',
+    'nn-NO': 'Norwegian (Nynorsk)',
+    'or': 'Oriya',
+    'pa-IN': 'Punjabi',
+    'pl': 'Polish',
+    'pt-BR': 'Portuguese (Brazil)',
+    'pt-PT': 'Portuguese (Portugal)',
+    'rm': 'Romansh',
+    'ro': 'Romanian',
+    'ru': 'Russian',
+    'si': 'Sinhalese',
+    'sk': 'Slovak',
+    'sl': 'Slovenian',
+    'son': 'Songhai',
+    'sq': 'Albanian',
+    'sr': 'Serbian',
+    'sv-SE': 'Swedish',
+    'ta': 'Tamil',
+    'te': 'Telugu',
+    'th': 'Thai',
+    'tr': 'Turkish',
+    'uk': 'Ukrainan',
+    'ur': 'Urdu',
+    'uz': 'Uzbek',
+    'vi': 'Vietnamese',
+    'xh': 'Xhosa',
+    'zh-CN': 'Chinese (Simplified)',
+    'zh-TW': 'Chinese (Traditional)',
+}
+
+
 def run_zenity(type, *args, **popen_kwargs):
     kwargs = dict(
         stdin=PIPE, stdout=PIPE,
@@ -96,8 +195,7 @@ class Progress:
             self.close()
 
 
-def install():
-    url = 'https://download.mozilla.org/?product=firefox-beta-latest&os=linux64&lang=fr'
+def install(archive_url):
     with TemporaryDirectory(dir=DATA_PATH) as tmpdir:
         ff_archive_path = Path(tmpdir) / 'firefox.tar.bz2'
         with Progress(title="firefox-auto", auto_close=True) as progress:
@@ -106,11 +204,13 @@ def install():
                 percent = current_size / total_size
                 progress.update(
                     percent,
-                    f'Downloading latest release...   {percent:.0%}',
+                    f'Downloading firefox...   {percent:.0%}',
                 )
 
             urllib.request.urlcleanup()
-            urllib.request.urlretrieve(url, ff_archive_path, reporthook)
+            urllib.request.urlretrieve(
+                archive_url, ff_archive_path, reporthook
+            )
 
         release_path = DATA_PATH / 'beta'
         with Progress(
@@ -129,10 +229,59 @@ def install():
             )
 
 
+def get_url(channel='stable', lang='en-US', arch='x64'):
+    base_url = 'https://download.mozilla.org/'
+    products = {
+        'stable': 'firefox-55.0.2-SSL',
+        'beta': 'firefox-56.0b4-SSL',
+        'dev': 'firefox-devedition-latest-ssl',
+        'nightly': 'firefox-nightly-latest-ssl',
+        'esr': 'firefox-52.3.0esr-SSL',
+    }
+    oses = {
+        'x64': 'linux64',
+        'x86': 'linux',
+    }
+    query = urllib.parse.urlencode(dict(
+        product=products[channel], lang=lang, os=oses[arch]
+    ))
+    return f'{base_url}?{query}'
+
+
+def gui_chooser():
+    channels = ['stable', 'beta', 'dev', 'nightly', 'esr']
+    languages = [
+        LANGUAGES['en-US'],
+        *sorted(LANGUAGES.values())
+    ]
+    args = []
+    args.append("--title=firefox-auto")
+    args.append("--text=Parameters")
+    args.append("--add-combo=Language")
+    args.append("--combo-values=" + '|'.join(languages))
+    args.append("--add-combo=Channel")
+    args.append("--combo-values=" + '|'.join(channels))
+    args.append("--add-entry=Alternative: full URL of archive (ignore previous fields)")
+    process = run_zenity('--forms', *args)
+    if process.wait() == 1:
+        raise UserAbort
+
+    output = process.stdout.read()
+    lang, channel, url = output.strip(' \n').split('|')
+    if url:
+        return url
+    lang_code = next(
+        key for key, val in LANGUAGES.items()
+        if val == lang
+    )
+    return get_url(channel=channel, lang=lang_code, arch='x64')
+
+
 def main():
     exec_path = DATA_PATH / 'beta' / 'firefox'
     if not exec_path.exists():
-        install()
+        download_url = gui_chooser()
+        install(download_url)
 
     args = [exec_path.as_posix(), *sys.argv[1:]]
     os.execv(exec_path.as_posix(), args)
