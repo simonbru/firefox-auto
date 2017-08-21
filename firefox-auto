@@ -97,48 +97,29 @@ class Progress:
 
 
 def install():
-    # progress = Progress(auto_close=False)
-    # for i in range(101):
-    #     print(i)
-    #     progress.update(i, f'{i}%')
-    #     time.sleep(0.015)
-    # time.sleep(1)
-    # # progress.update(55)
-    # progress.close()
-    # time.sleep(3)
-
-    # with Progress(auto_close=False) as progress:
-    #     for i in range(101):
-    #         print(i)
-    #         progress.update(i, f'{i}%')
-    #         time.sleep(0.015)
-    #     time.sleep(1)
-    #     # progress.update(55)
-    # time.sleep(3)
-
     url = 'https://download.mozilla.org/?product=firefox-beta-latest&os=linux64&lang=fr'
-    # with f as urllib.request.urlopen(url)
-    with Progress(title="firefox-auto", auto_close=True) as progress:
-        def reporthook(nb_blocks, block_size, total_size):
-            current_size = nb_blocks * block_size
-            percent = current_size / total_size
-            progress.update(
-                percent,
-                f'Downloading latest release...   {percent:.0%}',
-            )
+    with TemporaryDirectory(dir=DATA_PATH) as tmpdir:
+        ff_archive_path = Path(tmpdir) / 'firefox.tar.bz2'
+        with Progress(title="firefox-auto", auto_close=True) as progress:
+            def reporthook(nb_blocks, block_size, total_size):
+                current_size = nb_blocks * block_size
+                percent = current_size / total_size
+                progress.update(
+                    percent,
+                    f'Downloading latest release...   {percent:.0%}',
+                )
 
-        urllib.request.urlcleanup()
-        urllib.request.urlretrieve(url, '/tmp/firefox.tar.bz2', reporthook)
+            urllib.request.urlcleanup()
+            urllib.request.urlretrieve(url, ff_archive_path, reporthook)
 
-    release_path = DATA_PATH / 'beta'
-    with Progress(
-        title="firefox-auto",
-        text='Extracting firefox...',
-        pulsate=True
-    ) as progress:
-        DATA_PATH.mkdir(parents=True, exist_ok=True)
-        with TemporaryDirectory(dir=DATA_PATH) as tmpdir:
-            with tarfile.open('/tmp/firefox.tar.bz2', 'r') as f:
+        release_path = DATA_PATH / 'beta'
+        with Progress(
+            title="firefox-auto",
+            text='Extracting firefox...',
+            pulsate=True
+        ) as progress:
+            DATA_PATH.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(ff_archive_path, 'r') as f:
                 f.extractall(tmpdir)
             if release_path.exists():
                 shutil.rmtree(release_path.as_posix())
@@ -150,26 +131,11 @@ def install():
 
 def main():
     exec_path = DATA_PATH / 'beta' / 'firefox'
-    # exec_path = DATA_PATH / 'beta' / 'run-mozilla.sh'
     if not exec_path.exists():
         install()
 
     args = [exec_path.as_posix(), *sys.argv[1:]]
-    # print(exec_path.as_posix())
-    # print(args)
     os.execv(exec_path.as_posix(), args)
-    # os.execv(
-    #     (DATA_PATH / 'beta' / 'run-mozilla.sh').as_posix(),
-    #     [
-    #         'run-mozilla.sh',
-    #         (DATA_PATH / 'beta' / 'firefox'),
-    #         *sys.argv[1:],
-    #     ]
-    # )
-    # os.execv('/bin/sh', [
-    #     'sh', '-c',
-    #     f'exec {exec_path.as_posix()} ' + ' '.join(sys.argv[1:])
-    # ])
 
 
 if __name__ == '__main__':
