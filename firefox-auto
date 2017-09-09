@@ -233,11 +233,11 @@ def install(archive_url):
 def get_url(channel='stable', lang='en-US', arch='x64'):
     base_url = 'https://download.mozilla.org/'
     products = {
-        'stable': 'firefox-55.0.2-SSL',
-        'beta': 'firefox-56.0b4-SSL',
+        'stable': 'firefox-latest-ssl',
+        'beta': 'firefox-beta-latest-ssl',
         'dev': 'firefox-devedition-latest-ssl',
         'nightly': 'firefox-nightly-latest-ssl',
-        'esr': 'firefox-52.3.0esr-SSL',
+        'esr': 'firefox-esr-latest-ssl',
     }
     oses = {
         'x64': 'linux64',
