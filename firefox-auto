@@ -4,6 +4,7 @@
 # Zenity convenience functions are inspired from PyZenity.py (by Brian Ramos)
 
 import os
+import platform
 import shutil
 import sys
 import tarfile
@@ -231,7 +232,7 @@ def install(archive_url, install_folder):
             )
 
 
-def get_url(channel='stable', lang='en-US', arch='x64'):
+def get_url(channel='stable', lang='en-US', arch='x86_64'):
     base_url = 'https://download.mozilla.org/'
     products = {
         'stable': 'firefox-latest-ssl',
@@ -241,8 +242,8 @@ def get_url(channel='stable', lang='en-US', arch='x64'):
         'esr': 'firefox-esr-latest-ssl',
     }
     oses = {
-        'x64': 'linux64',
         'x86': 'linux',
+        'x86_64': 'linux64',
     }
     query = urllib.parse.urlencode(dict(
         product=products[channel], lang=lang, os=oses[arch]
@@ -250,7 +251,7 @@ def get_url(channel='stable', lang='en-US', arch='x64'):
     return f'{base_url}?{query}'
 
 
-def gui_chooser(channel=None):
+def gui_chooser(arch, channel=None):
     languages = [
         LANGUAGES['en-US'],
         *sorted(LANGUAGES.values())
@@ -283,7 +284,7 @@ def gui_chooser(channel=None):
     )
     if not channel:
         channel = 'stable'
-    return get_url(channel=channel, lang=lang_code, arch='x64')
+    return get_url(channel=channel, lang=lang_code, arch=arch)
 
 
 def main():
@@ -292,10 +293,17 @@ def main():
         print(f'ERROR: FF_CHANNEL set to unknown channel: "{channel}"')
         return 1
 
+    if os.environ.get('FF_ARCH', None):
+        arch = os.environ['FF_ARCH']
+    elif platform.machine().endswith('64'):
+        arch = 'x86_64'
+    else:
+        arch = 'x86'
+
     install_folder = channel or 'default'
     exec_path = DATA_PATH / install_folder / 'firefox'
     if not exec_path.exists():
-        download_url = gui_chooser(channel)
+        download_url = gui_chooser(arch, channel)
         install(download_url, install_folder)
 
     args = [exec_path.as_posix(), *sys.argv[1:]]
