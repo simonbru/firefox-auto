@@ -17,6 +17,7 @@ import xdg.BaseDirectory
 
 DATA_PATH = Path(xdg.BaseDirectory.xdg_data_home) / 'firefox-auto'
 
+CHANNELS = ['stable', 'beta', 'dev', 'nightly', 'esr']
 
 LANGUAGES = {
     'ach': 'Acholi',
@@ -196,7 +197,7 @@ class Progress:
             self.close()
 
 
-def install(archive_url):
+def install(archive_url, install_folder):
     with TemporaryDirectory(dir=DATA_PATH) as tmpdir:
         ff_archive_path = Path(tmpdir) / 'firefox.tar.bz2'
         with Progress(title="firefox-auto", auto_close=True) as progress:
@@ -213,7 +214,7 @@ def install(archive_url):
                 archive_url, ff_archive_path, reporthook
             )
 
-        release_path = DATA_PATH / 'beta'
+        release_path = DATA_PATH / install_folder
         with Progress(
             title="firefox-auto",
             text='Extracting firefox...',
@@ -249,8 +250,7 @@ def get_url(channel='stable', lang='en-US', arch='x64'):
     return f'{base_url}?{query}'
 
 
-def gui_chooser():
-    channels = ['stable', 'beta', 'dev', 'nightly', 'esr']
+def gui_chooser(channel=None):
     languages = [
         LANGUAGES['en-US'],
         *sorted(LANGUAGES.values())
@@ -260,15 +260,21 @@ def gui_chooser():
     args.append("--text=Optional install parameters")
     args.append("--add-list=Language")
     args.append("--list-values=" + '|'.join(languages))
-    args.append("--add-combo=Channel")
-    args.append("--combo-values=" + '|'.join(channels))
-    args.append("--add-entry=Alternative: full URL of archive (ignore previous fields)")
+    if not channel:
+        args.append("--add-combo=Channel")
+        args.append("--combo-values=" + '|'.join(CHANNELS))
+    args.append("--add-entry=Alternative: full URL of archive")
     process = run_zenity('--forms', *args)
     if process.wait() == 1:
         raise UserAbort
 
     output = process.stdout.read()
-    lang, channel, url = [val.strip(' ,\n') for val in output.split('|')]
+    fields = [val.strip(' ,\n') for val in output.split('|')]
+    if channel:
+        lang, url = fields
+    else:
+        lang, channel, url = fields
+
     if url:
         return url
     lang_code = next(
@@ -281,14 +287,22 @@ def gui_chooser():
 
 
 def main():
-    exec_path = DATA_PATH / 'beta' / 'firefox'
+    channel = os.environ.get('FF_CHANNEL', None)
+    if channel and channel not in CHANNELS:
+        print(f'ERROR: FF_CHANNEL set to unknown channel: "{channel}"')
+        return 1
+
+    install_folder = channel or 'default'
+    exec_path = DATA_PATH / install_folder / 'firefox'
     if not exec_path.exists():
-        download_url = gui_chooser()
-        install(download_url)
+        download_url = gui_chooser(channel)
+        install(download_url, install_folder)
 
     args = [exec_path.as_posix(), *sys.argv[1:]]
     os.execv(exec_path.as_posix(), args)
 
 
 if __name__ == '__main__':
-    main()
+    code = main()
+    if code is not None:
+        sys.exit(code)
